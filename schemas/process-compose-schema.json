@@ -244,10 +244,7 @@
           "type": "array"
         }
       },
-      "type": "object",
-      "required": [
-        "name"
-      ]
+      "type": "object"
     },
     "ProcessDependency": {
       "properties": {
