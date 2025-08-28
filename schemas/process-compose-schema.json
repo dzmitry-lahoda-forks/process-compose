@@ -344,8 +344,11 @@
     "RestartPolicyConfig": {
       "properties": {
         "restart": {
-          "type": "integer"
-        },
+          "oneOf": [
+          { "type": "integer", "enum": [0, 1, 2, 3] },
+          { "type": "string", "enum": ["no", "always", "on_failure", "exit_on_failure"] }
+          ]
+        },  
         "backoff_seconds": {
           "type": "integer"
         },
