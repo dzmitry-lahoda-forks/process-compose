@@ -163,7 +163,7 @@
           "type": "array"
         },
         "log_location": {
-          "type": "string"
+          "type": ["string", "null"]
         },
         "log_configuration": {
           "$ref": "#/$defs/LoggerConfig"
@@ -269,7 +269,7 @@
     "Project": {
       "properties": {
         "version": {
-          "type": "string"
+          "type": ["string", "null"]
         },
         "name": {
           "type": "string"
@@ -339,8 +339,7 @@
         }
       },
       "type": "object",
-      "required": [
-        "version",
+      "required": [        
         "processes"
       ]
     },
