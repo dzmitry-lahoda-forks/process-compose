@@ -252,7 +252,10 @@
     "ProcessDependency": {
       "properties": {
         "condition": {
-          "type": "integer"
+          "oneOf": [
+            { "type": "integer", "enum": [0, 1, 2, 3] },
+            { "type": "string", "enum": ["process_started", "process_healthy", "process_completed", "process_completed_successfully"] }
+          ]
         }
       },
       "type": "object"
