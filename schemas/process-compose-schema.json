@@ -145,7 +145,8 @@
     "ProcessConfig": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional"
         },
         "disabled": {
           "type": "boolean"
