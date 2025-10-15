@@ -51,6 +51,7 @@ pub struct ProcessComposeFlags {
 pub enum ProcessComposeCommand {
     /// Run process compose project
     Up(ProcessComposeFlagsUp),
+    Version
 }
 
 impl ProcessComposeCommand {
@@ -69,6 +70,9 @@ impl TryInto<Vec<String>> for ProcessComposeCommand {
                 args.push("up".to_string());
                 let up_args: Vec<String> = up.try_into()?;
                 args.extend(up_args);
+            },
+            ProcessComposeCommand::Version => {
+                args.push("version".to_string());
             }
         }
         Ok(args)

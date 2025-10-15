@@ -4,10 +4,14 @@
 pkgs.mkShell {
   packages =
     let
-      goMod = builtins.readFile ./go.mod;
-      goLine = builtins.elemAt (pkgs.lib.splitString "\n" goMod) 2;
-      goLineMapped = builtins.replaceStrings [ " " "." ] [ "_" "_" ] goLine;
-      go = pkgs."${goLineMapped}";
+      goFromGoMod = goModPath:
+        let
+          goMod = builtins.readFile goModPath;
+          goLine = builtins.elemAt (pkgs.lib.splitString "\n" goMod) 2;
+          goVersionFull = builtins.elemAt (pkgs.lib.splitString " " goLine) 1;
+          goVersionMM = pkgs.lib.versions.majorMinor goVersionFull;
+        in pkgs."go_${builtins.replaceStrings [ "." ] [ "_" ] goVersionMM}";
+      go = goFromGoMod ./go.mod;
       swag2op = pkgs.buildGoModule {
         pname = "swag2op";
         version = "v1.0.1";
