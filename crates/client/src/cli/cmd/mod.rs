@@ -12,3 +12,4 @@ macro_rules! arg {
 pub mod flags;
 pub mod parent;
 pub mod up;
+pub mod version;

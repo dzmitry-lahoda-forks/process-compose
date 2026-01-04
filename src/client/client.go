@@ -1,9 +1,12 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"github.com/f1bonacc1/process-compose/src/api"
 	"github.com/f1bonacc1/process-compose/src/pclog"
 	"github.com/f1bonacc1/process-compose/src/types"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -197,4 +201,51 @@ func (p *PcClient) GetFullProcessEnvironment(proc *types.ProcessConfig) []string
 
 func (p *PcClient) GetDependencyGraph() (*types.DependencyGraph, error) {
 	return p.getDependencyGraph()
+}
+func (p *PcClient) UpdateProcesses(processes *[]types.ProcessConfig) (map[string]string, error) {
+	url := fmt.Sprintf("http://%s/namespace", p.address)
+	jsonData, err := json.Marshal(processes)
+	if err != nil {
+		log.Err(err).Msg("failed to marshal processes")
+		return nil, err
+	}
+	// treat 400 as partial failure and still return the map
+	return p.doMapRequest(http.MethodPut, url, bytes.NewBuffer(jsonData), "failed to update some processes")
+}
+
+// doMapRequest executes an HTTP request, expecting a JSON body with
+// shape map[string]string on success (200) or partial failure (400).
+// For non-200/400 responses, it decodes pcError and returns it as error.
+func (p *PcClient) doMapRequest(method, url string, body io.Reader, partialErrMsg string) (map[string]string, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest {
+		results := map[string]string{}
+		if err = json.NewDecoder(resp.Body).Decode(&results); err != nil {
+			log.Err(err).Msg("failed to decode map response")
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusBadRequest {
+			if partialErrMsg == "" {
+				partialErrMsg = "partial failure"
+			}
+			return results, errors.New(partialErrMsg)
+		}
+		return results, nil
+	}
+
+	var respErr pcError
+	if err = json.NewDecoder(resp.Body).Decode(&respErr); err != nil {
+		log.Err(err).Msg("failed to decode error response")
+		return nil, err
+	}
+	return nil, errors.New(respErr.Error)
 }

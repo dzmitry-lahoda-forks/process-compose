@@ -322,7 +322,7 @@ func (p *ProjectRunner) GetProcessState(name string) (*types.ProcessState, error
 		state, ok = p.processStates[name]
 		if !ok {
 			log.Error().Msgf("Error: process %s doesn't exist", name)
-			return nil, fmt.Errorf("can't get state of process %s: no such process", name)
+			return nil, fmt.Errorf("can't get state of process %s: %w", name, types.ErrProcessNotFound)
 		}
 	}
 	// Add next run time for scheduled processes
@@ -1162,7 +1162,7 @@ func (p *ProjectRunner) UpdateProject(project *types.Project) (map[string]string
 	}
 	//Update processes
 	for name, proc := range updatedProcs {
-		err := p.UpdateProcess(&proc)
+		err := p.updateOrAddProcess(&proc, false)
 		if err != nil {
 			log.Err(err).Msgf("Failed to update process %s", name)
 			errs = append(errs, err)
@@ -1194,7 +1194,9 @@ func (p *ProjectRunner) ReloadProject() (map[string]string, error) {
 	}
 	return status, nil
 }
-func (p *ProjectRunner) UpdateProcess(updated *types.ProcessConfig) error {
+
+// updateOrAddProcess updates an existing process or adds a new one based on `new` flag.
+func (p *ProjectRunner) updateOrAddProcess(updated *types.ProcessConfig, new bool) error {
 	isScaleChanged := false
 	validateProbes(updated.LivenessProbe)
 	validateProbes(updated.ReadinessProbe)
@@ -1205,11 +1207,18 @@ func (p *ProjectRunner) UpdateProcess(updated *types.ProcessConfig) error {
 			log.Debug().Msgf("Process %s is up to date", updated.Name)
 			return nil
 		}
+
+		if new {
+			err := fmt.Errorf("process %s already exists", updated.ReplicaName)
+			log.Err(err).Msgf("Failed to add new process %s", updated.ReplicaName)
+			return err
+		}
+
 		log.Debug().Msgf("Process %s is updated", updated.Name)
 		if currentProc.Replicas != updated.Replicas {
 			isScaleChanged = true
 		}
-	} else {
+	} else if !new {
 		err := fmt.Errorf("no such process: %s", updated.ReplicaName)
 		log.Err(err).Msgf("Failed to update process %s", updated.ReplicaName)
 		return err
@@ -1230,6 +1239,139 @@ func (p *ProjectRunner) UpdateProcess(updated *types.ProcessConfig) error {
 		}
 	}
 	return nil
+}
+
+func (p *ProjectRunner) UpdateProcesses(processes *[]types.ProcessConfig) (map[string]string, error) {
+	status := make(map[string]string)
+	if processes == nil || len(*processes) == 0 {
+		return status, fmt.Errorf("no processes provided")
+	}
+
+	var errs []error
+	for _, process := range *processes {
+		if process.ReplicaName == "" {
+			err := fmt.Errorf("process ReplicaName is required")
+			status[process.ReplicaName] = err.Error()
+			errs = append(errs, err)
+			continue
+		}
+		if err := p.updateOrAddProcess(&process, true); err != nil {
+			status[process.ReplicaName] = err.Error()
+			errs = append(errs, err)
+			continue
+		}
+		status[process.ReplicaName] = "ok"
+	}
+
+	if len(errs) == len(*processes) {
+		return nil, errors.Join(errs...)
+	}
+	return status, nil
+}
+
+// UpdateProcess implements IProject. It updates an existing process configuration.
+// To add a new process at runtime, use UpdateProcesses which supports additions.
+func (p *ProjectRunner) UpdateProcess(updated *types.ProcessConfig) error {
+	return p.updateOrAddProcess(updated, false)
+}
+
+// StopNamespace stops all processes in a given namespace.
+// Returns map of process name -> result ("ok" or error).
+// If namespace contains no processes, returns ErrNamespaceNotFound.
+func (p *ProjectRunner) StopNamespace(namespace string) (map[string]string, error) {
+	names, err := p.getProcessNamesInNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+	return p.StopProcesses(names)
+}
+
+// DisableNamespace sets Disabled=true for all processes in the namespace.
+// Returns per-process results map and error if any failures occurred.
+func (p *ProjectRunner) DisableNamespace(namespace string) (map[string]string, error) {
+	return p.updateNamespaceDisabled(namespace, true, "failed to disable some processes")
+}
+
+// EnableNamespace sets Disabled=false for all processes in the namespace.
+// Returns per-process results map and error if any failures occurred.
+func (p *ProjectRunner) EnableNamespace(namespace string) (map[string]string, error) {
+	return p.updateNamespaceDisabled(namespace, false, "failed to enable some processes")
+}
+
+// getProcessNamesInNamespace returns all process names in the given namespace
+// or ErrNamespaceNotFound if none exist.
+func (p *ProjectRunner) getProcessNamesInNamespace(namespace string) ([]string, error) {
+	states, err := p.GetProcessesState()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0)
+	for _, st := range states.States {
+		if st.Namespace == namespace {
+			names = append(names, st.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil, ErrNamespaceNotFound
+	}
+	return names, nil
+}
+
+// updateNamespaceDisabled applies the Disabled flag value to all processes
+// within a namespace and returns per-process results and a partial failure error when needed.
+func (p *ProjectRunner) updateNamespaceDisabled(namespace string, disabled bool, partialMsg string) (map[string]string, error) {
+	names, err := p.getProcessNamesInNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+	results := make(map[string]string)
+	failures := 0
+	for _, name := range names {
+		cfg, err := p.GetProcessInfo(name)
+		if err != nil {
+			results[name] = err.Error()
+			failures++
+			continue
+		}
+		cfg.Disabled = disabled
+		if err := p.updateOrAddProcess(cfg, false); err != nil {
+			results[name] = err.Error()
+			failures++
+		} else {
+			results[name] = "ok"
+		}
+	}
+	if failures > 0 {
+		return results, errors.New(partialMsg)
+	}
+	return results, nil
+}
+
+func (p *ProjectRunner) RemoveNamespace(namespace string) (map[string]string, error) {
+	removed := make(map[string]string)
+	var errs []error
+	names := make([]string, 0)
+
+	for name, proc := range p.project.Processes {
+		if proc.Namespace == namespace {
+			names = append(names, name)
+		}
+	}
+
+	for _, name := range names {
+		if err := p.removeProcess(name); err != nil {
+			removed[name] = err.Error()
+			errs = append(errs, err)
+		} else {
+			removed[name] = types.ProcessUpdateRemoved
+		}
+	}
+
+	if len(errs) == len(names) {
+		return nil, errors.Join(errs...)
+	}
+
+	return removed, errors.Join(errs...)
 }
 
 func (p *ProjectRunner) prepareEnvCmds() {
