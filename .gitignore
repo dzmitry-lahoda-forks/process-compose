@@ -21,3 +21,4 @@ target
 .gopath
 .cache
 .gocache
+.gomodcache
