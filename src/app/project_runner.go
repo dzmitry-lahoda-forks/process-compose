@@ -583,30 +583,6 @@ func (p *ProjectRunner) StartNamespace(namespace string) error {
 	return nil
 }
 
-func (p *ProjectRunner) StopNamespace(namespace string) error {
-	names, err := p.getNamespaceProcesses(namespace)
-	if err != nil {
-		return err
-	}
-	// Reverse order for stop
-	slices.Reverse(names)
-
-	log.Info().Msgf("Stopping namespace: %s", namespace)
-
-	var errs []error
-	for _, name := range names {
-		if p.getRunningProcess(name) != nil {
-			if err := p.StopProcess(name); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("failed to stop namespace %s: %v", namespace, errs)
-	}
-	return nil
-}
-
 func (p *ProjectRunner) RestartNamespace(namespace string) error {
 	// Determine processes first
 	names, err := p.getNamespaceProcesses(namespace)

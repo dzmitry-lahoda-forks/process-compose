@@ -30,6 +30,8 @@ type IProject interface {
 	// Iterates all processes (best effort).
 	// If all proceses were stopped, error is nil.
 	StopProcesses(names []string) (map[string]string, error)
+	// StartNamespace starts all processes in the given namespace.
+	StartNamespace(name string) error
 	RestartNamespace(namespace string) error
 	GetNamespaces() ([]string, error)
 	// StopNamespace stops all processes in the given namespace.

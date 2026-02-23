@@ -29,23 +29,9 @@ func (p *PcClient) startNamespace(name string) error {
 	return errors.New(respErr.Error)
 }
 
-func (p *PcClient) stopNamespace(name string) error {
+func (p *PcClient) stopNamespace(name string) (map[string]string, error) {
 	url := fmt.Sprintf("http://%s/namespace/stop/%s", p.address, url.PathEscape(name))
-	resp, err := p.client.Post(url, "application/json", nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-
-	var respErr pcError
-	if err = json.NewDecoder(resp.Body).Decode(&respErr); err != nil {
-		log.Error().Msgf("failed to decode stop namespace %s response: %v", name, err)
-		return err
-	}
-	return errors.New(respErr.Error)
+	return p.namespacePatch(url, "failed to stop some processes")
 }
 
 func (p *PcClient) restartNamespace(name string) error {

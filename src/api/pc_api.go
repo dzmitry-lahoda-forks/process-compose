@@ -411,27 +411,6 @@ func (api *PcApi) StartNamespace(c *gin.Context) {
 }
 
 // @Schemes
-// @Id				StopNamespace
-// @Description	Stops the namespace
-// @Tags			Namespace
-// @Summary		Stop a namespace
-// @Produce		json
-// @Param			name	path		string				true	"Namespace Name"
-// @Success		200		{object}	api.NameResponse	"Stopped Namespace Name"
-// @Failure		400		{object}	map[string]string
-// @Router			/namespace/stop/{name} [post]
-func (api *PcApi) StopNamespace(c *gin.Context) {
-	name := c.Param("name")
-	err := api.project.StopNamespace(name)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"name": name})
-}
-
-// @Schemes
 // @Id				RestartNamespace
 // @Description	Restarts the namespace
 // @Tags			Namespace

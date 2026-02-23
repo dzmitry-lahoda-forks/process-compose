@@ -218,7 +218,7 @@ func (nm *namespaceModal) executeOperation(namespace string, operation namespace
 	case namespaceOperationStart:
 		err = nm.view.project.StartNamespace(namespace)
 	case namespaceOperationStop:
-		err = nm.view.project.StopNamespace(namespace)
+		_, err = nm.view.project.StopNamespace(namespace)
 	case namespaceOperationRestart:
 		err = nm.view.project.RestartNamespace(namespace)
 	default:

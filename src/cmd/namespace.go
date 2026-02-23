@@ -42,9 +42,12 @@ var namespaceStopCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		namespace := args[0]
 		client := getClient()
-		err := client.StopNamespace(namespace)
+		results, err := client.StopNamespace(namespace)
 		if err != nil {
 			fmt.Printf("Failed to stop namespace '%s': %v\n", namespace, err)
+			if len(results) > 0 {
+				fmt.Printf("Partial results: %v\n", results)
+			}
 			os.Exit(1)
 		}
 		fmt.Printf("Namespace '%s' stopped successfully\n", namespace)

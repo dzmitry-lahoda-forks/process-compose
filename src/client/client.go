@@ -166,7 +166,7 @@ func (p *PcClient) StartNamespace(name string) error {
 	return p.startNamespace(name)
 }
 
-func (p *PcClient) StopNamespace(name string) error {
+func (p *PcClient) StopNamespace(name string) (map[string]string, error) {
 	return p.stopNamespace(name)
 }
 
