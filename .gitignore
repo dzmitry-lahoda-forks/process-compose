@@ -20,3 +20,7 @@ Cargo.lock
 target
 *.swp
 #/.agent
+.gopath
+.cache
+.gocache
+.gomodcache

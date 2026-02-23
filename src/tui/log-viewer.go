@@ -233,4 +233,3 @@ func (l *LogView) AddMark() {
 func (l *LogView) setTruncator(t truncator) {
 	l.truncator = t
 }
-

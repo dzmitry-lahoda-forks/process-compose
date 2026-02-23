@@ -1484,3 +1484,143 @@ func getSleepCommand(seconds float64) string {
 	}
 	return fmt.Sprintf("sleep %f", seconds)
 }
+
+func TestSystem_DisableEnableStopDeleteUpdateProcesses(t *testing.T) {
+	testNs := "ns"
+	shell := command.DefaultShellConfig()
+
+	// Define two long-running processes in the same namespace
+	p1 := types.ProcessConfig{
+		Name:        "proc1",
+		ReplicaName: "proc1",
+		Namespace:   testNs,
+		Executable:  shell.ShellCommand,
+		Args:        []string{shell.ShellArgument, "sleep 5"},
+		RestartPolicy: types.RestartPolicyConfig{
+			Restart: types.RestartPolicyNo,
+		},
+	}
+	p2 := types.ProcessConfig{
+		Name:        "proc2",
+		ReplicaName: "proc2",
+		Namespace:   testNs,
+		Executable:  shell.ShellCommand,
+		Args:        []string{shell.ShellArgument, "sleep 5"},
+		RestartPolicy: types.RestartPolicyConfig{
+			Restart: types.RestartPolicyNo,
+		},
+	}
+
+	project := &types.Project{
+		Processes:   map[string]types.ProcessConfig{"proc1": p1},
+		ShellConfig: shell,
+	}
+
+	runner, err := NewProjectRunner(&ProjectOpts{project: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Start project
+	done := make(chan error, 1)
+	go func() { done <- runner.Run() }()
+
+	waitForProcess(t, "proc1", runner)
+
+	// Run new process
+	added, err := runner.UpdateProcesses(&[]types.ProcessConfig{p2})
+
+	if err != nil {
+		t.Fatalf("UpdateProcesses failed: %v", err)
+	}
+	if len(added) != 1 || added["proc2"] != "ok" {
+		t.Fatalf("Expected proc2 to be added, got: %v", added)
+	}
+
+	// Wait both processes to be running
+	waitForProcess(t, "proc2", runner)
+
+	// Disable both via DisableNamespace
+	if _, err := runner.DisableNamespace(testNs); err != nil {
+		t.Fatalf("DisableNamespace failed: %v", err)
+	}
+
+	// Expect both disabled and not running
+	for _, name := range []string{"proc1", "proc2"} {
+		for attempts := 0; attempts < 200; attempts++ {
+			st, err := runner.GetProcessState(name)
+			if err == nil && !st.IsRunning && st.Status == types.ProcessStateDisabled {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+			if attempts == 199 {
+				t.Fatalf("%s not disabled within timeout: %+v err=%v", name, st, err)
+			}
+		}
+	}
+
+	// Enable both via EnableNamespace
+	if _, err := runner.EnableNamespace(testNs); err != nil {
+		t.Fatalf("EnableNamespace failed: %v", err)
+	}
+
+	// Expect both running again
+	for _, name := range []string{"proc1", "proc2"} {
+		for attempts := 0; attempts < 200; attempts++ {
+			st, err := runner.GetProcessState(name)
+			if err == nil && st.IsRunning {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+			if attempts == 199 {
+				t.Fatalf("%s not running within timeout after enable", name)
+			}
+		}
+	}
+
+	// Stop both via StopNamespace
+	_, _ = runner.StopNamespace(testNs)
+	for _, name := range []string{"proc1", "proc2"} {
+		for attempts := 0; attempts < 200; attempts++ {
+			st, err := runner.GetProcessState(name)
+			if err == nil && !st.IsRunning {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+			if attempts == 199 {
+				t.Fatalf("%s not stopped within timeout", name)
+			}
+		}
+	}
+
+	// Delete namespace (remove both)
+	removed, err := runner.RemoveNamespace(testNs)
+	if err != nil && removed == nil {
+		t.Fatalf("RemoveNamespace failed: %v", err)
+	}
+
+	// Now both should be removed from configuration (GetProcessInfo fails)
+	for _, name := range []string{"proc1", "proc2"} {
+		if _, err := runner.GetProcessInfo(name); err == nil {
+			t.Fatalf("%s should not exist after removal", name)
+		}
+	}
+
+	// Ensure runner finishes cleanly
+	_ = runner.ShutDownProject()
+}
+
+func waitForProcess(t *testing.T, proceName string, runner *ProjectRunner) {
+	for _, name := range []string{proceName} {
+		for attempts := 0; attempts < 200; attempts++ {
+			st, err := runner.GetProcessState(name)
+			if err == nil && st.IsRunning {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+			if attempts == 199 {
+				t.Fatalf("%s failed to start within timeout", name)
+			}
+		}
+	}
+}

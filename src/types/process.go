@@ -1,6 +1,8 @@
 package types
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -410,6 +412,85 @@ const (
 	ProcessConditionLogReady
 )
 
+func (c *ProcessCondition) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	switch value {
+	case "process_completed":
+		*c = ProcessConditionCompleted
+	case "process_completed_successfully":
+		*c = ProcessConditionCompletedSuccessfully
+	case "process_healthy":
+		*c = ProcessConditionHealthy
+	case "process_started":
+		*c = ProcessConditionStarted
+	case "process_log_ready":
+		*c = ProcessConditionLogReady
+	default:
+		return fmt.Errorf("Invalid process dependency condition: %q", value)
+	}
+	return nil
+}
+
+func (c *ProcessCondition) UnmarshalText(data []byte) error {
+	value := string(data)
+	switch value {
+	case "process_completed":
+		*c = ProcessConditionCompleted
+	case "process_completed_successfully":
+		*c = ProcessConditionCompletedSuccessfully
+	case "process_healthy":
+		*c = ProcessConditionHealthy
+	case "process_started":
+		*c = ProcessConditionStarted
+	case "process_log_ready":
+		*c = ProcessConditionLogReady
+	default:
+		return fmt.Errorf("Invalid process dependency condition: %q", value)
+	}
+	return nil
+}
+
+func (c ProcessCondition) MarshalText() ([]byte, error) {
+	var value string
+	switch c {
+	case ProcessConditionCompleted:
+		value = "process_completed"
+	case ProcessConditionCompletedSuccessfully:
+		value = "process_completed_successfully"
+	case ProcessConditionHealthy:
+		value = "process_healthy"
+	case ProcessConditionStarted:
+		value = "process_started"
+	case ProcessConditionLogReady:
+		value = "process_log_ready"
+	default:
+		return nil, fmt.Errorf("Invalid process dependency condition: %d", c)
+	}
+	return []byte(value), nil
+}
+
+func (c ProcessCondition) MarshalJSON() ([]byte, error) {
+	var value string
+	switch c {
+	case ProcessConditionCompleted:
+		value = "process_completed"
+	case ProcessConditionCompletedSuccessfully:
+		value = "process_completed_successfully"
+	case ProcessConditionHealthy:
+		value = "process_healthy"
+	case ProcessConditionStarted:
+		value = "process_started"
+	case ProcessConditionLogReady:
+		value = "process_log_ready"
+	default:
+		return nil, fmt.Errorf("Invalid process dependency condition: %d", c)
+	}
+	return json.Marshal(value)
+}
+
 func (c *ProcessCondition) UnmarshalYAML(node *yaml.Node) error {
 	var value string
 	if err := node.Decode(&value); err != nil {
@@ -436,7 +517,8 @@ func (c *ProcessCondition) UnmarshalYAML(node *yaml.Node) error {
 type DependsOnConfig map[string]ProcessDependency
 
 type ProcessDependency struct {
-	Condition  ProcessCondition       `yaml:",omitempty" jsonschema:"type=string,enum=process_started,enum=process_healthy,enum=process_completed,enum=process_completed_successfully,enum=process_log_ready"`
+	// yes, both yaml and json tags are needed, so that both openapi and config are correct enum strings
+	Condition  ProcessCondition       `json:"condition" yaml:"condition,omitempty" swaggertype:"string" enums:"process_completed,process_completed_successfully,process_healthy,process_started,process_log_ready" example:"process_completed_successfully" jsonschema:"type=string,enum=process_started,enum=process_healthy,enum=process_completed,enum=process_completed_successfully,enum=process_log_ready"`
 	Extensions map[string]interface{} `yaml:",inline"`
 }
 
@@ -446,3 +528,5 @@ const (
 	ProcessUpdateAdded   = "added"
 	ProcessUpdateError   = "error"
 )
+
+var ErrProcessNotFound = errors.New("process not found")
